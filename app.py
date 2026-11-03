@@ -148,6 +148,7 @@ if "upload_key" not in st.session_state:
 def nieuw_gesprek():
     st.session_state.messages = []
     st.session_state.upload_key += 1
+    st.session_state.opnames = []
 
 
 # ---------------------------------------------------------------- zijbalk
@@ -180,8 +181,95 @@ with st.sidebar:
     st.caption("Je tutor helpt je nadenken, maar het werk doe je zelf. 💪")
 
 
+# ---------------------------------------------------------------- uitspraak
+VOORBEELDZINNEN = [
+    "Je suis en deuxième année.",
+    "Nous mangeons une pomme.",
+    "Vous êtes très gentils.",
+    "Ils ont un chien et un chat.",
+    "Elle parle français avec sa copine.",
+    "Nous commençons le cours à huit heures.",
+    "Tu as quel âge ?",
+    "J'habite à Bruges, en Belgique.",
+]
+
+
+def spreek_uit(tekst, snelheid):
+    """Laat de browser de zin in het Frans voorlezen (gratis, geen API)."""
+    veilig = json.dumps(tekst).replace("<", "\\u003c")
+    knop_html = f"""
+<button id="b" style="font-size:16px;padding:10px 18px;border-radius:10px;border:0;
+ background:#0055A4;color:#fff;cursor:pointer">🔊 Luister hoe het klinkt</button>
+<span id="m" style="margin-left:10px;font-family:sans-serif;color:#666;font-size:14px"></span>
+<script>
+const zin = {veilig};
+document.getElementById('b').onclick = () => {{
+  if (!('speechSynthesis' in window)) {{
+    document.getElementById('m').textContent = 'Voorlezen werkt niet in deze browser.'; return;
+  }}
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(zin);
+  u.lang = 'fr-FR'; u.rate = {snelheid};
+  const fr = speechSynthesis.getVoices().find(v => v.lang && v.lang.startsWith('fr'));
+  if (fr) u.voice = fr;
+  speechSynthesis.speak(u);
+}};
+</script>"""
+    if hasattr(st, "iframe"):
+        st.iframe(knop_html, height=56)
+    else:
+        import streamlit.components.v1 as components
+        components.html(knop_html, height=56)
+
+
+if "opnames" not in st.session_state:
+    st.session_state.opnames = []
+if "oefenzin" not in st.session_state:
+    st.session_state.oefenzin = VOORBEELDZINNEN[0]
+
+
+def nieuwe_zin():
+    import random
+    keuzes = [z for z in VOORBEELDZINNEN if z != st.session_state.oefenzin]
+    st.session_state.oefenzin = random.choice(keuzes)
+
+
+def uitspraak_oefenen():
+    with st.expander("🎤 Uitspraak oefenen", expanded=False):
+        st.caption("Luister naar de zin, neem jezelf op en vergelijk. "
+                   "Je opnames blijven alleen op dit toestel, tot je de pagina sluit.")
+        kol1, kol2 = st.columns([4, 1])
+        with kol1:
+            st.text_input("Zin om te oefenen", key="oefenzin")
+        with kol2:
+            st.write("")
+            st.button("🎲", help="Andere voorbeeldzin", on_click=nieuwe_zin)
+        zin = (st.session_state.oefenzin or "").strip()
+        if zin:
+            traag = st.toggle("Langzaam voorlezen", value=True)
+            spreek_uit(zin, 0.75 if traag else 1.0)
+
+        opname = st.audio_input("Neem jezelf op (tik op de microfoon)",
+                                key=f"mic_{len(st.session_state.opnames)}")
+        if opname is not None:
+            st.session_state.opnames.insert(0, {"zin": zin, "audio": opname.getvalue(),
+                                                "tijd": time.strftime("%H:%M")})
+            st.session_state.opnames = st.session_state.opnames[:5]
+            st.rerun()
+
+        if st.session_state.opnames:
+            st.markdown("**Je opnames** (nieuwste eerst)")
+            for i, o in enumerate(st.session_state.opnames):
+                st.caption(f"{o['tijd']} · {o['zin']}")
+                st.audio(o["audio"], format="audio/wav")
+            if st.button("🗑️ Opnames wissen"):
+                st.session_state.opnames = []
+                st.rerun()
+
+
 # ---------------------------------------------------------------- chat
 st.title("🇫🇷 Frans-bijles")
+uitspraak_oefenen()
 
 with st.chat_message("assistant", avatar="🇫🇷"):
     st.markdown(BEGROETING)
