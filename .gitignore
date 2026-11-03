@@ -1,0 +1,8 @@
+.env
+.env.*
+!.env.example
+schoolwerk/
+*.bak
+__pycache__/
+.DS_Store
+.streamlit/secrets.toml

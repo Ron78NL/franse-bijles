@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="nl" translate="no" class="notranslate">
+<head>
+<meta charset="utf-8">
+<meta name="google" content="notranslate">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frans-bijles</title>
+<style>
+  :root { --bg:#f6f7fb; --card:#fff; --ink:#1f2540; --muted:#6b7191; --accent:#c0392b; --accent-soft:#fde8e6; --user:#c0392b; --line:#e3e6f2; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); display: flex; flex-direction: column; }
+  header { padding: 14px 20px; background: var(--card); border-bottom: 1px solid var(--line); display:flex; align-items:center; justify-content:space-between; }
+  header h1 { font-size: 1.15rem; margin: 0; }
+  header button { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 10px; padding: 6px 12px; cursor: pointer; font-size: .9rem; }
+  header button:hover { background: var(--accent-soft); }
+  #chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; max-width: 820px; width: 100%; margin: 0 auto; }
+  .msg { max-width: 85%; padding: 12px 16px; border-radius: 16px; line-height: 1.5; font-size: 1.05rem; white-space: pre-wrap; word-wrap: break-word; }
+  .msg.bot { background: var(--card); border: 1px solid var(--line); align-self: flex-start; border-bottom-left-radius: 4px; }
+  .msg.me { background: var(--user); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+  .msg.err { background: #fff0f0; border-color: #f2c4c4; color: #8a1f1f; }
+  .msg img { max-width: 220px; max-height: 180px; border-radius: 10px; display: block; margin-bottom: 8px; }
+  .msg .chip { display: inline-block; background: rgba(255,255,255,.2); border-radius: 8px; padding: 4px 8px; margin: 0 6px 6px 0; font-size: .9rem; }
+  .msg.bot .chip { background: var(--accent-soft); }
+  .msg .caption { font-size: .85rem; opacity: .85; margin-bottom: 4px; }
+  .typing { color: var(--muted); font-style: italic; }
+  footer { background: var(--card); border-top: 1px solid var(--line); padding: 12px 16px; }
+  .composer { max-width: 820px; margin: 0 auto; }
+  #previews { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  #previews:empty { display: none; }
+  #previews .pv { position: relative; }
+  #previews img { height: 64px; border-radius: 8px; border: 1px solid var(--line); }
+  #previews .chip { display: inline-block; background: var(--accent-soft); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 22px 6px 8px; font-size: .9rem; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #previews .pv button { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; border: none; background: #555; color: #fff; cursor: pointer; line-height: 1; }
+  #previews .clear { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 10px; padding: 4px 10px; cursor: pointer; font-size: .85rem; }
+  .row { display: flex; gap: 8px; align-items: flex-end; }
+  textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; font: inherit; font-size: 1.05rem; max-height: 140px; min-height: 48px; background: var(--bg); color: var(--ink); }
+  textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .btn { border: none; border-radius: 14px; height: 48px; padding: 0 16px; font-size: 1rem; cursor: pointer; }
+  .btn.photo { background: var(--accent-soft); color: var(--accent); }
+  .btn.send { background: var(--accent); color: #fff; font-weight: 600; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .hint { text-align:center; color: var(--muted); font-size: .8rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🇫🇷 Frans-bijles</h1>
+  <button id="reset" title="Opnieuw beginnen">Nieuw gesprek</button>
+</header>
+
+<div id="chat"></div>
+
+<footer>
+  <div class="composer">
+    <div id="previews"></div>
+    <div class="row">
+      <button class="btn photo" id="photoBtn" title="Foto's of pdf's van je werk toevoegen">📎 Bestanden</button>
+      <input type="file" id="file" accept="image/*,application/pdf" multiple hidden>
+      <textarea id="input" rows="1" placeholder="Typ je vraag of je poging…"></textarea>
+      <button class="btn send" id="send">Verstuur</button>
+    </div>
+    <div class="hint">Je tutor helpt je nadenken, maar het werk doe je zelf. 💪</div>
+  </div>
+</footer>
+
+<script>
+const chat = document.getElementById('chat');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+const fileInput = document.getElementById('file');
+const previews = document.getElementById('previews');
+let history = [];      // berichten voor de API
+let pending = [];      // bijlagen die nog niet verstuurd zijn: {name, type, data, preview?}
+let busy = false;
+
+function addMsg(text, cls, atts) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + cls;
+  (atts || []).forEach(a => {
+    if (a.preview) { const i = document.createElement('img'); i.src = a.preview; d.appendChild(i); }
+    else { const c = document.createElement('span'); c.className = 'chip'; c.textContent = '📄 ' + a.name; d.appendChild(c); }
+  });
+  const t = document.createElement('span');
+  t.textContent = text;
+  d.appendChild(t);
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+  return d;
+}
+
+function renderPreviews() {
+  previews.innerHTML = '';
+  if (!pending.length) return;
+  pending.forEach((a, i) => {
+    const w = document.createElement('div'); w.className = 'pv';
+    if (a.preview) { const img = document.createElement('img'); img.src = a.preview; img.title = a.name; w.appendChild(img); }
+    else { const c = document.createElement('span'); c.className = 'chip'; c.title = a.name; c.textContent = '📄 ' + a.name; w.appendChild(c); }
+    const x = document.createElement('button'); x.textContent = '×'; x.title = 'Verwijderen';
+    x.onclick = () => { pending.splice(i, 1); renderPreviews(); };
+    w.appendChild(x); previews.appendChild(w);
+  });
+  const clr = document.createElement('button'); clr.className = 'clear'; clr.textContent = '🗑️ Alle bijlagen wissen';
+  clr.onclick = () => { pending = []; renderPreviews(); };
+  previews.appendChild(clr);
+}
+
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+// Foto verkleinen zodat het versturen snel blijft
+function shrinkImage(dataUrl, max = 1400) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+// Bewaart het originele bestand in de map schoolwerk op de server
+async function saveToSchoolwerk(name, raw) {
+  const r = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, data: raw.split(',')[1] }) });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || 'Opslaan mislukt');
+  return d.name;
+}
+
+document.getElementById('photoBtn').onclick = () => fileInput.click();
+fileInput.onchange = async () => {
+  const files = Array.from(fileInput.files);
+  fileInput.value = '';
+  for (const f of files) {
+    const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+    const isImg = f.type.startsWith('image/');
+    if (!isPdf && !isImg) { addMsg(`Type niet ondersteund: ${f.name}`, 'bot err'); continue; }
+    try {
+      const raw = await readAsDataURL(f);
+      const att = isPdf
+        ? { name: f.name, type: 'application/pdf', data: raw.split(',')[1] }
+        : await (async () => { const j = await shrinkImage(raw); return { name: f.name, type: 'image/jpeg', data: j.split(',')[1], preview: j }; })();
+      pending.push(att);
+      try { await saveToSchoolwerk(f.name, raw); }
+      catch (e) { addMsg(`Bestand niet opgeslagen in schoolwerk (${f.name}): ${e.message}`, 'bot err'); }
+    } catch (e) {
+      addMsg(`Kon ${f.name} niet lezen.`, 'bot err');
+    }
+  }
+  renderPreviews();
+};
+
+input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 140) + 'px'; });
+input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+sendBtn.onclick = send;
+
+async function send() {
+  if (busy) return;
+  const text = input.value.trim();
+  if (!text && !pending.length) return;
+  busy = true; sendBtn.disabled = true;
+
+  const atts = pending.slice();
+  const content = atts.map(a => a.type === 'application/pdf'
+    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: a.data } }
+    : { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: a.data } });
+  content.push({ type: 'text', text: text || '(Zie bijlagen)' });
+  history.push({ role: 'user', content });
+
+  addMsg(text, 'me', atts);
+  input.value = ''; input.style.height = 'auto';
+  pending = []; renderPreviews();
+  const typing = addMsg('De tutor denkt na…', 'bot typing');
+
+  try {
+    const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: history }) });
+    const data = await r.json();
+    typing.remove();
+    if (!r.ok) { history.pop(); addMsg(data.error || 'Er ging iets mis.', 'bot err'); }
+    else { history.push({ role: 'assistant', content: data.text }); addMsg(data.text, 'bot'); }
+  } catch (e) {
+    typing.remove(); history.pop();
+    addMsg("Ik kan de tutor niet bereiken. Draait de server wel?", 'bot err');
+  }
+  busy = false; sendBtn.disabled = false; input.focus();
+}
+
+async function start() {
+  history = []; chat.innerHTML = ''; pending = []; renderPreviews();
+  // Eerste begroeting komt van de tutor zelf
+  history.push({ role: 'user', content: [{ type: 'text', text: '(Een nieuwe sessie begint. Begroet me kort in het Nederlands en vraag waaraan ik wil werken.)' }] });
+  busy = true; sendBtn.disabled = true;
+  const typing = addMsg('De tutor denkt na…', 'bot typing');
+  try {
+    const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: history }) });
+    const data = await r.json();
+    typing.remove();
+    if (!r.ok) { history = []; addMsg(data.error || 'Er ging iets mis.', 'bot err'); }
+    else { history.push({ role: 'assistant', content: data.text }); addMsg(data.text, 'bot'); }
+  } catch (e) {
+    typing.remove(); history = [];
+    addMsg("Ik kan de tutor niet bereiken. Draait de server wel?", 'bot err');
+  }
+  busy = false; sendBtn.disabled = false;
+}
+document.getElementById('reset').onclick = () => { if (!history.length || confirm('Een nieuw gesprek beginnen?')) start(); };
+start();
+</script>
+</body>
+</html>
