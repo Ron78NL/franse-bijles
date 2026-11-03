@@ -1,20 +1,24 @@
 {
   "name": "Frans-bijles",
   "short_name": "Frans",
-  "start_url": "./",
+  "start_url": "/franse-bijles/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#0055A4",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "/franse-bijles/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "icon-512.png",
+      "src": "/franse-bijles/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     }
-  ]
+  ],
+  "id": "/franse-bijles/?app=frans",
+  "scope": "/franse-bijles/"
 }
