@@ -1,0 +1,37 @@
+# Controle-robot: draait bij elke wijziging en elke maandagochtend.
+# LEERMODUS: 'on' zegt WANNEER de robot werkt, 'steps' zegt WAT hij doet.
+# Uitkomst zie je op GitHub onder het tabblad Actions; bij een fout krijg je een mail.
+name: Controle
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 5 * * 1"   # maandag 05:23 UTC = 06:23 Belgische wintertijd
+  workflow_dispatch:        # knop "Run workflow" om hem zelf te starten
+
+permissions:
+  contents: read
+  pages: read
+
+jobs:
+  controle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Websiteadres opzoeken (alleen bij de wekelijkse controle)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          url=$(gh api "repos/${{ github.repository }}/pages" --jq .html_url 2>/dev/null || true)
+          echo "SITE_URL=$url" >> "$GITHUB_ENV"
+      - name: Bestanden controleren
+        run: python .github/scripts/controle.py ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '--live' || '' }}
